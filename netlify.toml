@@ -1,0 +1,4 @@
+# Netlify settings: rebuild the photo list, then publish this folder as the site.
+[build]
+  command = "sh build.sh"
+  publish = "."
