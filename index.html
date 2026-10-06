@@ -250,6 +250,12 @@
     "1.jpg": [0.48, 0.45], // the two frames
   };
 
+  // Optional: a set background colour for a photo when it's shown whole.
+  // Photos not listed get a random colour each time.
+  const fixedZoomColour = {
+    "9.jpg": "#fcf2f1",
+  };
+
   // Photographs come from photos.js, which build.sh makes from the MEDIA folder.
   // They're shown in filename order, with numbers compared as numbers (2 before 10).
   const naturalOrder = (a, b) => {
@@ -329,10 +335,11 @@
   const setWhole = (whole) => {
     if (!images.length) return;
     images[current].classList.toggle("is-whole", whole);
-    // A whole photo sits on one of these pale colours, picked at random
+    // A whole photo sits on its own colour if it has one, otherwise a random one
     const zoomColours = ["#ffeff8", "#fff2f1", "#fffbea", "#fffce1", "#f2f0ec"];
     stage.style.backgroundColor = whole
-      ? zoomColours[Math.floor(Math.random() * zoomColours.length)]
+      ? fixedZoomColour[images[current].dataset.name] ||
+        zoomColours[Math.floor(Math.random() * zoomColours.length)]
       : "";
     view.setAttribute("aria-pressed", String(whole));
   };
