@@ -23,7 +23,8 @@
     /* Small arrow cursors: white stroke with a dark halo so they read on light and dark photos */
     --cursor-prev: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M17 6 9 14l8 8' fill='none' stroke='%23000' stroke-opacity='.45' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M17 6 9 14l8 8' fill='none' stroke='%23fff' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 14 14, w-resize;
     --cursor-next: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='m11 6 8 8-8 8' fill='none' stroke='%23000' stroke-opacity='.45' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='m11 6 8 8-8 8' fill='none' stroke='%23fff' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") 14 14, e-resize;
-    --cursor-whole: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M8 14h12' fill='none' stroke='%23000' stroke-opacity='.45' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M8 14h12' fill='none' stroke='%23fff' stroke-width='1.75' stroke-linecap='round'/%3E%3C/svg%3E") 14 14, zoom-out;
+    /* Large red X: click to see the whole photo */
+    --cursor-whole: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Cpath d='M10 10 38 38M38 10 10 38' fill='none' stroke='%23000' stroke-opacity='.35' stroke-width='7' stroke-linecap='round'/%3E%3Cpath d='M10 10 38 38M38 10 10 38' fill='none' stroke='%23e3141b' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E") 24 24, zoom-out;
     --cursor-bleed: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Cpath d='M8 14h12M14 8v12' fill='none' stroke='%23000' stroke-opacity='.45' stroke-width='4' stroke-linecap='round'/%3E%3Cpath d='M8 14h12M14 8v12' fill='none' stroke='%23fff' stroke-width='1.75' stroke-linecap='round'/%3E%3C/svg%3E") 14 14, zoom-in;
   }
 
@@ -49,6 +50,7 @@
     inset: var(--rule) 0;
     overflow: hidden;
     background: var(--ground);
+    transition: background-color 650ms var(--ease);
   }
 
   .stage img {
@@ -58,7 +60,7 @@
     height: 100%;
     /* Each photo is drawn whole, then scaled up to fill the screen (--bleed is set by the script) */
     object-fit: contain;
-    transform: scale(var(--bleed, 1));
+    transform: translate(var(--shift-x, 0px), var(--shift-y, 0px)) scale(var(--bleed, 1));
     opacity: 0;
     transition: opacity 700ms var(--ease), transform 650ms var(--ease);
     user-select: none;
@@ -207,6 +209,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .stage,
     .stage img,
     .menu,
     .menu__panel,
@@ -241,6 +244,12 @@
 
 <script src="photos.js"></script>
 <script>
+  // Optional: the point to keep centered when a photo is full bleed, as
+  // [across, down] from 0 to 1. Photos not listed are centered on their middle.
+  const focus = {
+    "1.jpg": [0.48, 0.45], // the two frames
+  };
+
   // Photographs come from photos.js, which build.sh makes from the MEDIA folder.
   // They're shown in filename order, with numbers compared as numbers (2 before 10).
   const naturalOrder = (a, b) => {
@@ -274,8 +283,19 @@
     if (!img.naturalWidth) return;
     const box = stage.getBoundingClientRect();
     const x = box.width / img.naturalWidth, y = box.height / img.naturalHeight;
+    const bleed = Math.max(x, y) / Math.min(x, y);
+
+    // Slide the enlarged photo so its focus point sits in the middle, without uncovering an edge
+    const [fx, fy] = focus[img.dataset.name] || [0.5, 0.5];
+    const w = img.naturalWidth * Math.min(x, y) * bleed, h = img.naturalHeight * Math.min(x, y) * bleed;
+    const clamp = (v, room) => Math.max(-room, Math.min(room, v));
+    const shiftX = clamp((0.5 - fx) * w, (w - box.width) / 2);
+    const shiftY = clamp((0.5 - fy) * h, (h - box.height) / 2);
+
     img.style.transitionProperty = "opacity"; // apply the new size instantly, without animating
-    img.style.setProperty("--bleed", Math.max(x, y) / Math.min(x, y));
+    img.style.setProperty("--bleed", bleed);
+    img.style.setProperty("--shift-x", shiftX + "px");
+    img.style.setProperty("--shift-y", shiftY + "px");
     img.offsetWidth;
     img.style.transitionProperty = "";
   };
@@ -284,6 +304,7 @@
   const images = photos.map((name, i) => {
     const img = document.createElement("img");
     img.alt = `Photograph ${i + 1} of ${photos.length}`;
+    img.dataset.name = name;
     img.dataset.src = sized(name);
     img.addEventListener("load", () => fitBleed(img));
     // If the resizing service isn't available, fall back to the original file
@@ -308,6 +329,11 @@
   const setWhole = (whole) => {
     if (!images.length) return;
     images[current].classList.toggle("is-whole", whole);
+    // A whole photo sits on one of these pale colours, picked at random
+    const zoomColours = ["#ffeff8", "#fff2f1", "#fffbea", "#fffce1", "#f2f0ec"];
+    stage.style.backgroundColor = whole
+      ? zoomColours[Math.floor(Math.random() * zoomColours.length)]
+      : "";
     view.setAttribute("aria-pressed", String(whole));
   };
 
